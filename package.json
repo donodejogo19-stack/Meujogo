@@ -1,0 +1,8 @@
+{
+  "name": "roleplay-imperial-servidor",
+  "version": "1.0.0",
+  "description": "Servidor online simples (75 jogadores)",
+  "main": "server.js",
+  "scripts": { "start": "node server.js" },
+  "engines": { "node": ">=18" }
+}
