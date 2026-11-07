@@ -234,6 +234,42 @@ setInterval(() => {
   }
 }, 25000).unref();
 
+/* ---------- app instalável (PWA): manifest, service worker e ícones ---------- */
+const MANIFEST = JSON.stringify({
+  name: 'Roleplay Imperial', short_name: 'Imperial', start_url: '/', scope: '/',
+  display: 'fullscreen', background_color: '#1b2a44', theme_color: '#1b2a44',
+  icons: [
+    { src: '/icon-192.png', sizes: '192x192', type: 'image/png', purpose: 'any maskable' },
+    { src: '/icon-512.png', sizes: '512x512', type: 'image/png', purpose: 'any maskable' }
+  ]
+});
+const SW = "self.addEventListener('install',()=>self.skipWaiting());" +
+  "self.addEventListener('activate',e=>e.waitUntil(self.clients.claim()));" +
+  "self.addEventListener('fetch',e=>{if(e.request.mode==='navigate')e.respondWith(fetch(e.request).catch(()=>new Response('Sem conexão com o servidor. Tente de novo.',{status:503,headers:{'Content-Type':'text/plain; charset=utf-8'}})))});";
+const CRC_T = (() => { const t = []; for (let n = 0; n < 256; n++) { let c = n; for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1; t[n] = c >>> 0; } return t; })();
+function crc32(b) { let c = 0xffffffff; for (let i = 0; i < b.length; i++) c = CRC_T[(c ^ b[i]) & 255] ^ (c >>> 8); return (c ^ 0xffffffff) >>> 0; }
+function chunk(type, data) {
+  const t = Buffer.from(type), len = Buffer.alloc(4), crc = Buffer.alloc(4);
+  len.writeUInt32BE(data.length); crc.writeUInt32BE(crc32(Buffer.concat([t, data])));
+  return Buffer.concat([len, t, data, crc]);
+}
+function makeIcon(size) {   // ícone simples: fundo azul-escuro com um anel dourado
+  const raw = Buffer.alloc((size * 3 + 1) * size), c = size / 2;
+  for (let y = 0; y < size; y++) {
+    raw[y * (size * 3 + 1)] = 0;
+    for (let x = 0; x < size; x++) {
+      const d = Math.hypot(x + .5 - c, y + .5 - c) / size;
+      let col = [27, 42, 68];
+      if (d < .30 && d > .22) col = [240, 190, 60];
+      else if (d < .10) col = [240, 190, 60];
+      const o = y * (size * 3 + 1) + 1 + x * 3; raw[o] = col[0]; raw[o + 1] = col[1]; raw[o + 2] = col[2];
+    }
+  }
+  const ihdr = Buffer.alloc(13); ihdr.writeUInt32BE(size, 0); ihdr.writeUInt32BE(size, 4); ihdr[8] = 8; ihdr[9] = 2;
+  return Buffer.concat([Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]), chunk('IHDR', ihdr), chunk('IDAT', zlib.deflateSync(raw)), chunk('IEND', Buffer.alloc(0))]);
+}
+const ICONS = { '/icon-192.png': makeIcon(192), '/icon-512.png': makeIcon(512) };
+
 /* ---------- HTTP ---------- */
 let cache = { mt: 0, raw: null, gz: null };
 function gameBuf() {
@@ -243,6 +279,9 @@ function gameBuf() {
 }
 const server = http.createServer((req, res) => {
   const url = req.url.split('?')[0];
+  if (url === '/manifest.json') { res.writeHead(200, { 'Content-Type': 'application/manifest+json' }); return res.end(MANIFEST); }
+  if (url === '/sw.js') { res.writeHead(200, { 'Content-Type': 'text/javascript', 'Cache-Control': 'no-cache' }); return res.end(SW); }
+  if (ICONS[url]) { res.writeHead(200, { 'Content-Type': 'image/png', 'Cache-Control': 'public, max-age=86400' }); return res.end(ICONS[url]); }
   if (url === '/health') { res.writeHead(200, { 'Content-Type': 'text/plain' }); return res.end('ok ' + players.size + '/' + MAX); }
   if (url === '/' || url === '/index.html' || url === '/game.html') {
     try {
