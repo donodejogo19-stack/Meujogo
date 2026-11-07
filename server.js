@@ -271,10 +271,21 @@ function makeIcon(size) {   // ícone simples: fundo azul-escuro com um anel dou
 const ICONS = { '/icon-192.png': makeIcon(192), '/icon-512.png': makeIcon(512) };
 
 /* ---------- HTTP ---------- */
+/* coloca as tags do app instalável no jogo (se o game.html ainda não tiver) */
+const PWA_HEAD = '<link rel=manifest href=/manifest.json><meta name=theme-color content=#1b2a44><meta name=mobile-web-app-capable content=yes><meta name=apple-mobile-web-app-capable content=yes><meta name=apple-mobile-web-app-title content="Roleplay Imperial"><link rel=apple-touch-icon href=/icon-192.png>';
+const PWA_TAIL = "<script>if('serviceWorker' in navigator&&location.protocol==='https:')addEventListener('load',function(){try{navigator.serviceWorker.register('/sw.js').catch(function(){})}catch(e){}})</script>";
+function pwaInject(buf) {
+  let h = buf.toString('utf8');
+  if (h.includes('rel=manifest') || h.includes('rel="manifest"')) return buf;
+  if (h.includes('<head>')) h = h.replace('<head>', '<head>' + PWA_HEAD);
+  const i = h.lastIndexOf('</body>');
+  if (i >= 0) h = h.slice(0, i) + PWA_TAIL + h.slice(i);
+  return Buffer.from(h, 'utf8');
+}
 let cache = { mt: 0, raw: null, gz: null };
 function gameBuf() {
   const st = fs.statSync(GAME_FILE);
-  if (st.mtimeMs !== cache.mt) { const raw = fs.readFileSync(GAME_FILE); cache = { mt: st.mtimeMs, raw, gz: zlib.gzipSync(raw) }; }
+  if (st.mtimeMs !== cache.mt) { const raw = pwaInject(fs.readFileSync(GAME_FILE)); cache = { mt: st.mtimeMs, raw, gz: zlib.gzipSync(raw) }; }
   return cache;
 }
 const server = http.createServer((req, res) => {
